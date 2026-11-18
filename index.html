@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2e75b6">
+<meta name="description" content="Create E.R.E Construction invoices and salaries sheets.">
+<title>ERE Documents</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root {
+    --accent: #2e75b6; --accent-dark: #225a8c; --accent-soft: #e8f1fa;
+    --bg: #f4f6f9; --card: #ffffff; --text: #1d2733; --muted: #66717f; --line: #dde3ea; --line-soft: #eef1f5;
+    --danger: #c0392b; --danger-soft: #fdecea; --ok: #1e8449; --ok-soft: #e7f5ec; --warn: #9a6700; --warn-soft: #fff6dc;
+    --radius: 12px; --nav-h: 64px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; font: 15px/1.45 "Segoe UI", Roboto, system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  [hidden] { display: none !important; }
+
+  /* ---------- header & navigation */
+  header { background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; padding-top: env(safe-area-inset-top); }
+  .bar { max-width: 1180px; margin: 0 auto; padding: 0 20px; display: flex; align-items: center; gap: 20px; height: 58px; }
+  .brand { font-weight: 700; font-size: 17px; color: var(--accent); white-space: nowrap; }
+  nav { display: flex; gap: 4px; flex: 1; }
+  nav button { background: none; border: 0; padding: 18px 12px 16px; font: inherit; color: var(--muted); cursor: pointer;
+               border-bottom: 3px solid transparent; display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+  nav button svg { width: 18px; height: 18px; }
+  nav button:hover { color: var(--text); }
+  nav button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .sync { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); background: none;
+          border: 1px solid var(--line); border-radius: 99px; padding: 6px 12px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  .sync .dot { width: 8px; height: 8px; border-radius: 50%; background: #aab4bf; flex: none; }
+  .sync.ok .dot { background: var(--ok); }
+  .sync.busy .dot { background: var(--accent); animation: pulse 1s infinite; }
+  .sync.warn .dot { background: #e0a100; }
+  .sync.err .dot { background: var(--danger); }
+  .sync.action { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+  .sync.action .dot { background: #fff; }
+  @keyframes pulse { 50% { opacity: .3; } }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 20px 60px; }
+  section[data-tab] { display: none; }
+  section[data-tab].active { display: block; }
+
+  @media (max-width: 760px) {
+    .bar { padding: 0 14px; height: 54px; gap: 10px; }
+    nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--line);
+          padding-bottom: env(safe-area-inset-bottom); z-index: 10; gap: 0; }
+    nav button { flex: 1; flex-direction: column; gap: 2px; padding: 9px 0 8px; font-size: 11.5px; border-bottom: 0; border-top: 3px solid transparent; }
+    nav button.active { border-top-color: var(--accent); border-bottom: 0; }
+    nav button svg { width: 22px; height: 22px; }
+    main { padding: 14px 12px calc(var(--nav-h) + 30px + env(safe-area-inset-bottom)); }
+    input, select { font-size: 16px !important; }
+  }
+
+  /* ---------- layout */
+  .grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+  @media (max-width: 760px) { .card { padding: 16px 14px; } }
+  .card h2 { margin: 0 0 16px; font-size: 17px; }
+  .card h3 { margin: 22px 0 10px; font-size: 12.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .row { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 12px; }
+  label.f { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); font-weight: 600; min-width: 0; }
+  input, select { font: inherit; color: var(--text); padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px;
+                  background: #fff; min-width: 0; width: 100%; height: 42px; }
+  input:focus, select:focus { outline: 3px solid var(--accent-soft); border-color: var(--accent); }
+  input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; flex: none; }
+  input.num { text-align: right; }
+  .muted { color: var(--muted); }
+  .hint { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+  .warn { font-size: 13px; color: var(--warn); }
+
+  .btn { font: inherit; border: 1px solid var(--line); background: #fff; color: var(--text); padding: 9px 15px; border-radius: 8px;
+         cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; justify-content: center; min-height: 40px; }
+  .btn:hover { border-color: #b9c3cf; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; padding: 12px 22px; min-height: 48px; }
+  .btn.primary:hover { background: var(--accent-dark); }
+  .btn.primary:disabled { opacity: .6; cursor: wait; }
+  .btn.small { padding: 6px 12px; font-size: 14px; min-height: 36px; }
+  .btn.link { border: 0; background: none; color: var(--accent); padding: 6px 8px; }
+  .btn.icon { border: 0; background: none; color: var(--muted); padding: 0; width: 36px; min-height: 36px; font-size: 22px; line-height: 1; }
+  .btn.icon:hover { color: var(--danger); }
+  .btn.danger { color: var(--danger); }
+  .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+  @media (max-width: 760px) { .actions .btn.primary { width: 100%; } }
+
+  .inline-add { display: none; gap: 10px; margin: 4px 0 12px; padding: 12px; background: var(--accent-soft); border-radius: 10px; flex-wrap: wrap; align-items: end; }
+  .inline-add.open { display: flex; }
+  .inline-add > * { flex: 1 1 160px; }
+  .inline-add > .btn { flex: 0 0 auto; }
+
+  .total { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 4px 0; font-size: 15px; }
+  .total b { font-size: 22px; }
+
+  /* ---------- invoice lines: a table on wide screens, stacked cards on phones */
+  .lines-head, .line { display: grid; grid-template-columns: 1.1fr 1.7fr .8fr .9fr 36px; gap: 8px; align-items: center; }
+  .lines-head { font-size: 12.5px; color: var(--muted); font-weight: 600; padding: 0 2px 6px; border-bottom: 1px solid var(--line); }
+  .line { padding: 8px 0; border-bottom: 1px solid var(--line-soft); }
+  .line .amt { text-align: right; font-variant-numeric: tabular-nums; padding-right: 4px; }
+  .line .lbl { display: none; }
+  .r { text-align: right; }
+  @media (max-width: 760px) {
+    .lines-head { display: none; }
+    .line { grid-template-columns: 1fr 1fr 36px; grid-template-areas: "type type del" "qty rate rate" "amt amt amt";
+            background: #fafbfc; border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin-bottom: 10px; }
+    .line .c-type { grid-area: type; } .line .c-qty { grid-area: qty; } .line .c-rate { grid-area: rate; }
+    .line .c-amt { grid-area: amt; } .line .c-del { grid-area: del; }
+    .line.custom { grid-template-areas: "type type del" "qty qty qty" "amt amt amt"; }
+    .line .lbl { display: block; font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 3px; }
+    .line .amt { display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+    .line .amt .lbl { margin: 0; }
+  }
+
+  /* ---------- people rows (salaries) */
+  .person { display: grid; grid-template-columns: 30px 1fr 160px 36px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
+  .person.off .who, .person.off input.num { opacity: .45; }
+  .person .who b { font-weight: 600; display: block; }
+  .person .who span { font-size: 13px; color: var(--muted); }
+  @media (max-width: 480px) { .person { grid-template-columns: 30px 1fr 118px 30px; gap: 8px; } }
+
+  /* ---------- results & history */
+  .result { display: none; border-radius: var(--radius); padding: 14px 16px; margin-top: 16px; }
+  .result.ok { display: block; background: var(--ok-soft); border: 1px solid #b7e0c4; }
+  .result.err { display: block; background: var(--danger-soft); border: 1px solid #f3c1bb; color: var(--danger); }
+  .result .files { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .result .note { font-size: 13px; margin-top: 8px; color: var(--muted); }
+
+  .hist { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 14px; align-items: center; padding: 14px 2px; border-bottom: 1px solid var(--line-soft); }
+  .hist .main b { font-weight: 600; }
+  .hist .main div { font-size: 13px; color: var(--muted); }
+  .hist .amount { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+  .hist .btns { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
+  .badge { display: inline-block; padding: 3px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; }
+  .badge.inv { background: var(--accent-soft); color: var(--accent); }
+  .badge.sal { background: var(--warn-soft); color: var(--warn); }
+  .pending { font-size: 12px; color: var(--warn); }
+  .empty { text-align: center; color: var(--muted); padding: 30px 10px; }
+  .toolbar { display: flex; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+  .toolbar input { flex: 1 1 220px; }
+  .toolbar select { flex: 0 1 180px; }
+
+  /* ---------- settings lists */
+  .srow { display: grid; gap: 8px; align-items: center; padding: 6px 0; }
+  .srow.clients { grid-template-columns: 1.3fr 1fr 60px 36px; }
+  .srow.sites { grid-template-columns: 1fr 60px 36px; }
+  .srow.items { grid-template-columns: 1.2fr 1fr 110px 36px; }
+  .srow.head { font-size: 12.5px; color: var(--muted); font-weight: 600; padding-bottom: 2px; }
+  .srow .def { display: flex; justify-content: center; }
+  .srow .def input { width: 20px; height: 20px; accent-color: var(--accent); }
+  @media (max-width: 480px) {
+    section[data-tab=settings] .row { grid-template-columns: 1fr; }
+    .srow.clients { grid-template-columns: 1fr 1fr 44px 30px; }
+    .srow.items { grid-template-columns: 1fr 1fr 80px 30px; }
+  }
+
+  /* ---------- invoice preview (mirrors the PDF) */
+  .paper { background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: 26px; font-family: Arial, Helvetica, sans-serif;
+           font-size: 10px; color: #000; box-shadow: 0 2px 10px rgba(0,0,0,.05); }
+  @media (min-width: 1001px) { .preview-wrap { position: sticky; top: 80px; } }
+  .paper .top { display: flex; justify-content: space-between; gap: 12px; }
+  .paper .co { font-size: 17px; font-weight: 700; color: var(--accent); }
+  .paper .grey { color: #808080; font-size: 9px; }
+  .paper .inv { border-bottom: 1.5px solid var(--accent); margin: 16px 0 10px; padding-bottom: 4px; font: 11px "Times New Roman", serif; }
+  .paper .proj { padding-left: 14%; }
+  .paper table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  .paper th { background: var(--accent); color: #fff; text-align: left; padding: 6px; }
+  .paper th:last-child, .paper td:last-child { text-align: right; white-space: nowrap; }
+  .paper td { padding: 6px; border-bottom: 1px solid #ccc; }
+  .paper td.tot { background: #f2f2f2; font-weight: 700; }
+  .paper td.blank { border-bottom: 0; }
+  .paper .note { font-weight: 700; margin: 14px 0 8px; }
+  .paper .bank { border: 1px solid #999; padding: 6px 8px; font-size: 9px; width: 55%; }
+  details.preview-toggle summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 4px 0 12px; list-style: none; }
+  details.preview-toggle summary::-webkit-details-marker { display: none; }
+  @media (max-width: 1000px) { .paper { padding: 16px; font-size: 8.5px; } .paper .co { font-size: 14px; } .paper .grey { font-size: 8px; } }
+
+  .banner { background: var(--warn-soft); border: 1px solid #f0d78c; color: #6b4e00; border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px;
+            display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .banner span { flex: 1 1 240px; }
+
+  #toast { position: fixed; bottom: calc(24px + env(safe-area-inset-bottom)); left: 50%; transform: translate(-50%, 140px); background: #24303d; color: #fff;
+           padding: 11px 18px; border-radius: 10px; transition: transform .25s; z-index: 30; max-width: calc(100% - 32px); text-align: center; }
+  #toast.show { transform: translate(-50%, 0); }
+  @media (max-width: 760px) { #toast { bottom: calc(var(--nav-h) + 16px + env(safe-area-inset-bottom)); } }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand">E.R.E Documents</div>
+    <nav>
+      <button data-go="invoice" class="active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>
+        Invoice</button>
+      <button data-go="salaries">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.5a6.5 6.5 0 0 1 3 5.5"/></svg>
+        Salaries</button>
+      <button data-go="history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        History</button>
+      <button data-go="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        Settings</button>
+    </nav>
+    <button class="sync" id="sync" hidden><span class="dot"></span><span id="sync-text"></span></button>
+  </div>
+</header>
+
+<main>
+<div class="banner" id="setup-banner" hidden>
+  <span>Your company details are empty. Import your data file or fill them in under Settings.</span>
+  <button class="btn small" data-go-settings>Open Settings</button>
+</div>
+
+<!-- ============================================================ INVOICE -->
+<section data-tab="invoice" class="active">
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h2>Invoice details</h2>
+        <div class="row">
+          <label class="f">Invoice number <input id="inv-number" type="number" min="1" inputmode="numeric"></label>
+          <label class="f">Date <input id="inv-date" type="date"></label>
+        </div>
+        <div id="inv-number-warn" class="warn" style="margin:-4px 0 10px"></div>
+        <div class="row">
+          <label class="f">Bill to <select id="inv-client"></select></label>
+          <label class="f">Attention <input id="inv-attention" placeholder="(optional)"></label>
+        </div>
+        <div class="inline-add" id="add-client">
+          <label class="f">Company name <input id="new-client-name"></label>
+          <label class="f">Attention (contact) <input id="new-client-att"></label>
+          <button class="btn" id="new-client-save">Add company</button>
+          <button class="btn link" data-close="add-client">Cancel</button>
+        </div>
+        <div class="row">
+          <label class="f">Project / site <select id="inv-site"></select></label>
+        </div>
+        <div class="inline-add" id="add-site-inv">
+          <label class="f">New project / site name <input id="new-site-inv"></label>
+          <button class="btn" id="new-site-inv-save">Add site</button>
+          <button class="btn link" data-close="add-site-inv">Cancel</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Work done</h2>
+        <div class="lines-head"><span>Item</span><span>Quantity / description</span><span class="r">Rate (€)</span><span class="r">Amount</span><span></span></div>
+        <div id="lines"></div>
+        <div class="actions" style="margin-top:12px"><button class="btn small" id="add-item">+ Add line</button></div>
+        <div class="total"><span class="muted">Total</span><b id="inv-total">€0.00</b></div>
+      </div>
+
+      <div class="card">
+        <div class="hint" id="inv-filename" style="margin-top:0"></div>
+        <div class="actions"><button class="btn primary" id="inv-generate">Create invoice PDF</button></div>
+        <div class="result" id="inv-result"></div>
+      </div>
+    </div>
+
+    <div class="preview-wrap">
+      <details class="preview-toggle" id="preview-details" open>
+        <summary>Preview ▾</summary>
+        <div class="paper" id="preview"></div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ SALARIES -->
+<section data-tab="salaries">
+  <div class="card">
+    <h2>Salaries sheet</h2>
+    <div class="row" style="max-width:560px">
+      <label class="f">Date <input id="sal-date" type="date"></label>
+      <label class="f">Site <select id="sal-site"></select></label>
+    </div>
+    <div class="inline-add" id="add-site-sal" style="max-width:560px">
+      <label class="f">New site name <input id="new-site-sal"></label>
+      <button class="btn" id="new-site-sal-save">Add site</button>
+      <button class="btn link" data-close="add-site-sal">Cancel</button>
+    </div>
+
+    <h3>Workers</h3>
+    <div id="workers"></div>
+    <div class="actions" style="margin-top:12px"><button class="btn small" id="add-worker-open">+ Add worker</button></div>
+    <div class="inline-add" id="add-worker">
+      <label class="f">Full name <input id="new-worker-name" autocomplete="off"></label>
+      <label class="f">PPS No <input id="new-worker-pps" placeholder="1234567AB" autocomplete="off"></label>
+      <label class="f">Gross payment (€) <input id="new-worker-amount" type="number" step="0.01" min="0" inputmode="decimal" class="num"></label>
+      <button class="btn" id="new-worker-save">Add worker</button>
+      <button class="btn link" data-close="add-worker">Cancel</button>
+    </div>
+    <div class="total"><span class="muted">Total (workers)</span><b id="sal-total">€0.00</b></div>
+
+    <h3>Payroll (owner)</h3>
+    <div id="owner"></div>
+    <div class="hint">The owner goes in the separate PAYROLL section and isn't counted in the total, the same as your current sheet.</div>
+
+    <div class="hint" id="sal-filename" style="margin-top:16px"></div>
+    <div class="actions"><button class="btn primary" id="sal-generate">Create salaries sheet</button></div>
+    <div class="result" id="sal-result"></div>
+  </div>
+</section>
+
+<!-- ============================================================ HISTORY -->
+<section data-tab="history">
+  <div class="card">
+    <h2>History</h2>
+    <div class="toolbar">
+      <input id="hist-search" type="search" placeholder="Search number, company, site, name…">
+      <select id="hist-type">
+        <option value="">All documents</option><option value="invoice">Invoices</option><option value="salaries">Salaries</option>
+      </select>
+    </div>
+    <div id="history"></div>
+    <div class="actions" id="drive-folder-link" hidden><a class="btn small" target="_blank" rel="noopener">Open the Drive folder</a></div>
+  </div>
+</section>
+
+<!-- ============================================================ SETTINGS -->
+<section data-tab="settings">
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h2>Your company (shown on invoices)</h2>
+        <div class="row">
+          <label class="f">Company name <input data-bind="company.name"></label>
+          <label class="f">VAT Reg # <input data-bind="company.vat"></label>
+          <label class="f">Company number <input data-bind="company.number"></label>
+        </div>
+        <div class="row">
+          <label class="f">Mobile <input data-bind="company.mobile" type="tel"></label>
+          <label class="f">Email <input data-bind="company.email" type="email"></label>
+        </div>
+        <div class="row">
+          <label class="f">Address line 1 <input data-bind="company.address1"></label>
+          <label class="f">Address line 2 <input data-bind="company.address2"></label>
+        </div>
+        <h3>Bank details</h3>
+        <div class="row">
+          <label class="f">Account no <input data-bind="company.account"></label>
+          <label class="f">Sort code <input data-bind="company.sortCode"></label>
+          <label class="f">IBAN <input data-bind="company.iban"></label>
+        </div>
+        <label class="f">Note under the total <input data-bind="company.vatNote"></label>
+      </div>
+
+      <div class="card">
+        <h2>Billable companies</h2>
+        <div class="srow clients head"><span>Company</span><span>Attention</span><span class="r">Default</span><span></span></div>
+        <div id="set-clients"></div>
+        <div class="actions"><button class="btn small" id="set-add-client">+ Add company</button></div>
+      </div>
+
+      <div class="card">
+        <h2>Prices</h2>
+        <div class="srow items head"><span>Item name</span><span>Unit</span><span class="r">€ per unit</span><span></span></div>
+        <div id="set-items"></div>
+        <div class="hint">On the invoice a line reads like: <i>3690 Block @ 2/block</i></div>
+        <div class="actions"><button class="btn small" id="set-add-item">+ Add item</button></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>Google Drive</h2>
+        <div id="drive-state"></div>
+      </div>
+
+      <div class="card">
+        <h2>Invoice numbering</h2>
+        <label class="f" style="max-width:200px">Next invoice number <input data-bind="nextInvoiceNumber" type="number" min="1" inputmode="numeric"></label>
+        <div class="hint">Goes up by one every time an invoice is created, on any device.</div>
+      </div>
+
+      <div class="card">
+        <h2>Sites / projects</h2>
+        <div class="srow sites head"><span>Name</span><span class="r">Default</span><span></span></div>
+        <div id="set-sites"></div>
+        <div class="actions"><button class="btn small" id="set-add-site">+ Add site</button></div>
+      </div>
+
+      <div class="card">
+        <h2>Owner (payroll)</h2>
+        <div class="row">
+          <label class="f">Name <input data-bind="owner.name"></label>
+          <label class="f">PPS No <input data-bind="owner.pps"></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Backup</h2>
+        <div class="actions" style="margin-top:0">
+          <button class="btn small" id="backup-download">Download a backup</button>
+          <label class="btn small">Import a data file<input type="file" id="backup-import" accept=".json,application/json" hidden></label>
+        </div>
+        <div class="hint">Importing replaces all lists and settings on every device.</div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+<div id="toast"></div>
+
+<script src="config.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script src="docs.js"></script>
+<script src="drive.js"></script>
+<script src="app.js"></script>
+<script src="https://accounts.google.com/gsi/client" async onload="window.onGoogleReady && onGoogleReady()"></script>
+</body>
+</html>
