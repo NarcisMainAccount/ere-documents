@@ -282,7 +282,7 @@ function refreshResults() {
     const h = byId(data.history, r.historyId); if (!h) continue;
     const el = $(`#${tab === 'invoice' ? 'inv' : 'sal'}-result`);
     const title = h.type === 'invoice' ? `Invoice ${h.number} created` : 'Salaries sheet created';
-    const driveNote = !Drive.enabled() ? 'Google Drive is not set up, so this file is only on this device. Share or download it now.'
+    const driveNote = !Drive.enabled() ? 'Downloaded to this device. You can download it again from History any time.'
       : h.file ? 'Saved in Google Drive.' : 'It will be saved to Google Drive as soon as there is a connection.';
     el.className = 'result ok';
     el.innerHTML = `<b>✓ ${esc(title)}</b><div class="muted" style="font-size:13px;word-break:break-word">${esc(h.fileName)}</div>
@@ -498,6 +498,7 @@ $('#inv-generate').onclick = async () => {
     $('#inv-number').value = data.nextInvoiceNumber;
     updateInvoice();
     showResult('invoice', h, blob);
+    if (!Drive.enabled()) downloadFile(blob, h.fileName);
     sync();
   } catch (e) {
     fail(e.message);
@@ -598,6 +599,7 @@ $('#sal-generate').onclick = async () => {
     if (Drive.enabled()) { await Queue.add({ id: h.id, historyId: h.id, folder: 'Salaries', name: h.fileName, blob }); pendingUploads++; }
     changed();
     showResult('salaries', h, blob);
+    if (!Drive.enabled()) downloadFile(blob, h.fileName);
     sync();
   } catch (e) {
     out.className = 'result err'; out.textContent = e.message;
@@ -694,7 +696,7 @@ function renderSettings() {
 function renderSettingsDrive() {
   const el = $('#drive-state');
   if (!Drive.enabled()) {
-    el.innerHTML = '<div class="muted">Google Drive is not set up for this app yet, so everything is stored on this device only.</div>';
+    el.closest('.card').hidden = true;
     return;
   }
   const link = Drive.folderLink();

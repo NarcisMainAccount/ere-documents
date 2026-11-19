@@ -414,6 +414,14 @@
 <script src="docs.js"></script>
 <script src="drive.js"></script>
 <script src="app.js"></script>
-<script src="https://accounts.google.com/gsi/client" async onload="window.onGoogleReady && onGoogleReady()"></script>
+<script>
+  // Google sign-in is only loaded when Drive sync is configured in config.js.
+  if ((window.ERE_CONFIG || {}).googleClientId) {
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+    s.onload = () => window.onGoogleReady && onGoogleReady();
+    document.body.append(s);
+  }
+</script>
 </body>
 </html>
