@@ -1,5 +1,5 @@
 // Offline support: always try the network first (so updates show up), fall back to the cached copy.
-const CACHE = 'ere-documents-v1';
+const CACHE = 'ere-documents-v2';
 const FILES = [
   './', 'index.html', 'app.js', 'docs.js', 'drive.js', 'config.js', 'manifest.webmanifest',
   'vendor/jspdf.umd.min.js', 'vendor/jszip.min.js', 'templates/salaries-template.xlsx',
