@@ -1,4 +1,4 @@
-// E.R.E Documents: forms, history, settings and syncing with Google Drive.
+// E.R.E Documents: forms, history and settings. Everything is stored on this device.
 'use strict';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -14,7 +14,7 @@ const ppsOk = s => /^\d{7}[A-Z]{1,2}$/i.test(String(s).replace(/\s/g, ''));
 const byId = (list, id) => list.find(x => x.id === id);
 const clone = o => JSON.parse(JSON.stringify(o));
 
-// No personal details in here: this file is public. Real data comes from Drive or an imported file.
+// No personal details in here: this file is public. Real data is typed in Settings or imported from a backup file.
 const DEFAULTS = {
   version: 1,
   company: { name: '', vat: '', number: '', mobile: '', email: '', address1: '', address2: '', account: '', sortCode: '', iban: '',
@@ -25,8 +25,7 @@ const DEFAULTS = {
   workers: [],
   owner: { name: '', pps: '', lastAmount: '', pay: true },
   nextInvoiceNumber: 1,
-  history: [],
-  deleted: {}
+  history: []
 };
 const LISTS = ['clients', 'sites', 'itemTypes', 'workers', 'history'];
 
@@ -35,179 +34,22 @@ function normalize(d) {
   out.company = { ...DEFAULTS.company, ...(d?.company || {}) };
   out.owner = { ...DEFAULTS.owner, ...(d?.owner || {}) };
   for (const k of LISTS) out[k] = Array.isArray(out[k]) ? out[k] : [];
-  out.deleted = out.deleted || {};
   out.nextInvoiceNumber = Math.max(1, parseInt(out.nextInvoiceNumber) || 1);
+  delete out.deleted; out.history.forEach(h => delete h.file);   // left over from the old Google Drive version
   return out;
 }
 
-// ------------------------------------------------------------------ local storage
-const LS_DATA = 'ere.data', LS_META = 'ere.meta';
+// ------------------------------------------------------------------ storage (this device only)
+const LS_DATA = 'ere.data';
 const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } };
 
 let data = normalize(lsGet(LS_DATA));
-// version: Drive version we last synced with; rev/syncedRev: local edit counter, to know if there is something to upload.
-let meta = { version: null, rev: 0, syncedRev: 0, overwrite: false, ...(lsGet(LS_META) || {}) };
-const isDirty = () => meta.rev !== meta.syncedRev;
-function persist() { lsSet(LS_DATA, data); lsSet(LS_META, meta); }
-
 // Call after every change to `data`.
-let pushTimer;
-function changed() {
-  meta.rev++;
-  persist();
-  clearTimeout(pushTimer);
-  pushTimer = setTimeout(() => sync(), 1200);
-  renderStatus();
-}
+const changed = () => lsSet(LS_DATA, data);
 
-// ------------------------------------------------------------------ pending uploads (IndexedDB)
-const Queue = (() => {
-  let dbp;
-  const db = () => dbp ||= new Promise((res, rej) => {
-    const r = indexedDB.open('ere-documents', 1);
-    r.onupgradeneeded = () => r.result.createObjectStore('uploads', { keyPath: 'id' });
-    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
-  });
-  const tx = async (mode, fn) => {
-    const store = (await db()).transaction('uploads', mode).objectStore('uploads');
-    return new Promise((res, rej) => { const r = fn(store); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
-  };
-  return {
-    add: item => tx('readwrite', s => s.put(item)),
-    all: () => tx('readonly', s => s.getAll()),
-    remove: id => tx('readwrite', s => s.delete(id))
-  };
-})();
-let pendingUploads = 0;
-Queue.all().then(a => { pendingUploads = a.length; renderStatus(); }).catch(() => {});
-
-// ------------------------------------------------------------------ sync with Drive
-// Both devices edit their own copy; when versions differ the lists are merged by id.
-function merge(local, remote) {
-  remote = normalize(remote);
-  const deleted = { ...remote.deleted, ...local.deleted };
-  const out = { ...remote, ...local, deleted };          // settings: this device's latest edits win
-  for (const k of LISTS) {
-    const map = new Map(remote[k].map(x => [x.id, x]));
-    for (const x of local[k]) {
-      const other = map.get(x.id);
-      // For history keep whichever copy knows about the uploaded file.
-      map.set(x.id, k === 'history' && other?.file && !x.file ? other : x);
-    }
-    out[k] = [...map.values()].filter(x => !deleted[x.id]);
-  }
-  out.history.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-  const maxNo = Math.max(0, ...out.history.filter(h => h.type === 'invoice').map(h => parseInt(h.number) || 0));
-  out.nextInvoiceNumber = Math.max(local.nextInvoiceNumber, remote.nextInvoiceNumber, maxNo + 1);
-  return out;
-}
-
-let syncState = 'idle', syncError = '', syncing = null, syncAgain = false;
-
-function sync() {
-  if (!Drive.enabled()) return Promise.resolve();
-  if (syncing) { syncAgain = true; return syncing; }
-  // .finally() runs after `syncing` is assigned, even when runSync() returns immediately.
-  syncing = runSync().finally(() => {
-    syncing = null;
-    renderStatus();
-    if (syncAgain) { syncAgain = false; sync(); }
-  });
-  return syncing;
-}
-
-async function runSync() {
-  try {
-    if (!navigator.onLine) { syncState = 'offline'; return; }
-    if (!Drive.hasToken()) { syncState = 'signin'; return; }
-    syncState = 'busy'; renderStatus();
-
-    const remoteVersion = await Drive.getVersion();
-    if (remoteVersion != null && remoteVersion !== meta.version) {
-      const remote = await Drive.readData();
-      if (remote && !meta.overwrite) {
-        const before = JSON.stringify(data);
-        data = isDirty() ? merge(data, remote.data) : normalize(remote.data);
-        if (JSON.stringify(data) !== before) onDataReplaced();
-      }
-      meta.version = remote?.version ?? remoteVersion;
-      persist();
-    }
-
-    await uploadPending();
-
-    if (isDirty() || remoteVersion == null || meta.overwrite) {
-      const rev = meta.rev;
-      meta.version = await Drive.writeData(JSON.stringify(data));
-      meta.syncedRev = rev;
-      meta.overwrite = false;
-      persist();
-    }
-    syncState = 'ok'; syncError = '';
-  } catch (e) {
-    if (e instanceof Drive.AuthError) syncState = 'signin';
-    else if (!navigator.onLine) syncState = 'offline';
-    else { syncState = 'err'; syncError = e.message; console.error(e); }
-  }
-}
-
-async function uploadPending() {
-  const items = await Queue.all();
-  pendingUploads = items.length;
-  for (const it of items) {
-    const h = byId(data.history, it.historyId);
-    if (h && !h.file) {
-      const f = await Drive.upload(it.blob, it.name, it.folder);
-      h.file = { id: f.id, link: f.webViewLink };
-      meta.rev++;
-    }
-    await Queue.remove(it.id);
-    pendingUploads--;
-    persist();
-    refreshResults();
-  }
-}
-
-// Sign in from a tap, then sync.
-async function connectDrive() {
-  try { await Drive.signIn(); } catch (e) { toast(e.message); renderStatus(); return false; }
-  await sync();
-  renderSettingsDrive();
-  return true;
-}
-
-function renderStatus() {
-  const b = $('#sync'), t = $('#sync-text');
-  if (!Drive.enabled()) { b.hidden = true; return; }
-  b.hidden = false;
-  const pending = pendingUploads ? ` · ${pendingUploads} to upload` : '';
-  let cls = '', text = '';
-  if (syncState === 'signin' || (!Drive.hasToken() && syncState !== 'offline')) { cls = 'action'; text = Drive.wasConnected() ? 'Reconnect Drive' : 'Connect Google Drive'; }
-  else if (syncState === 'offline' || !navigator.onLine) { cls = 'warn'; text = 'Offline' + (isDirty() || pendingUploads ? ' · will sync later' : ''); }
-  else if (syncState === 'busy') { cls = 'busy'; text = 'Syncing…'; }
-  else if (syncState === 'err') { cls = 'err'; text = 'Sync problem · retry'; }
-  else if (isDirty() || pendingUploads) { cls = 'busy'; text = 'Saving…' + pending; }
-  else { cls = 'ok'; text = 'Saved to Drive'; }
-  b.className = 'sync ' + cls; t.textContent = text;
-  b.title = syncState === 'err' ? syncError : '';
-}
-$('#sync').onclick = () => {
-  if (!Drive.hasToken()) connectDrive();
-  else if (syncState === 'err') { toast(syncError); sync(); }
-  else sync();
-};
-
-// When data arrives from another device, refresh whatever is on screen without losing typing in progress.
-function onDataReplaced() {
-  const active = $('section[data-tab].active')?.dataset.tab;
-  if (!numberTouched) $('#inv-number').value = data.nextInvoiceNumber;
-  if (active === 'invoice') renderInvoiceForm(false);
-  if (active === 'salaries') renderSalaries();
-  if (active === 'history') renderHistory();
-  if (active === 'settings' && !$('section[data-tab=settings]').contains(document.activeElement)) renderSettings();
-  renderBanner();
-}
+// Clear what the old Google Drive version left behind (sign-in token, sync state, upload queue).
+try { ['ere.meta', 'ere.driveToken', 'ere.driveIds'].forEach(k => localStorage.removeItem(k)); indexedDB.deleteDatabase('ere-documents'); } catch { /* nothing to clear */ }
 
 // ------------------------------------------------------------------ toast, tabs, misc
 let toastTimer;
@@ -282,17 +124,15 @@ function refreshResults() {
     const h = byId(data.history, r.historyId); if (!h) continue;
     const el = $(`#${tab === 'invoice' ? 'inv' : 'sal'}-result`);
     const title = h.type === 'invoice' ? `Invoice ${h.number} created` : 'Salaries sheet created';
-    const driveNote = !Drive.enabled() ? 'Downloaded to this device. You can download it again from History any time.'
-      : h.file ? 'Saved in Google Drive.' : 'It will be saved to Google Drive as soon as there is a connection.';
+    const note = 'Downloaded to this device. You can download it again from History any time.';
     el.className = 'result ok';
     el.innerHTML = `<b>✓ ${esc(title)}</b><div class="muted" style="font-size:13px;word-break:break-word">${esc(h.fileName)}</div>
       <div class="files">
         ${canShare() ? `<button class="btn small" data-res-share="${tab}">Share…</button>` : ''}
         <button class="btn small" data-res-dl="${tab}">Download</button>
-        ${h.file ? `<a class="btn small" href="${esc(h.file.link)}" target="_blank" rel="noopener">Open in Drive</a>` : ''}
         ${tab === 'invoice' ? '<button class="btn small" data-newinv>New invoice</button>' : ''}
       </div>
-      <div class="note">${driveNote}</div>`;
+      <div class="note">${note}</div>`;
   }
 }
 document.addEventListener('click', e => {
@@ -461,19 +301,12 @@ $('#inv-generate').onclick = async () => {
   if (f.lines.some(l => l.kind === 'custom' && !String(l.text).trim())) problems.push('a description for every "Other" line');
   if (problems.length) return fail('Please add ' + problems.join(', ') + '.');
 
-  // Sign in first, while still inside the tap (otherwise the Google popup is blocked).
-  if (Drive.enabled() && navigator.onLine && !Drive.hasToken()) {
-    try { await Drive.signIn(); }
-    catch (e) { if (!confirm(`Couldn't connect to Google Drive (${e.message}).\n\nCreate the invoice anyway? It will be uploaded later.`)) return; }
-  }
   btn.disabled = true; btn.textContent = 'Creating…';
   try {
-    // Get the latest numbers from the other device before using one.
-    if (Drive.enabled()) await sync();
     if (invoiceExists(f.number)) {
       if (!numberTouched) {
         $('#inv-number').value = data.nextInvoiceNumber; updateInvoice();
-        return fail(`Invoice ${f.number} was already created (maybe on your other device). The number is now ${data.nextInvoiceNumber}. Check it and press Create again.`);
+        return fail(`Invoice ${f.number} already exists. The number is now ${data.nextInvoiceNumber}. Check it and press Create again.`);
       }
       if (!confirm(`Invoice ${f.number} already exists. Create another one with the same number?`)) return;
     }
@@ -488,18 +321,16 @@ $('#inv-generate').onclick = async () => {
       id: uid(), type: 'invoice', createdAt: new Date().toISOString(), number: f.number, date: f.date,
       billTo: f.billTo, attention: f.attention, project: f.project, total,
       lines: f.lines.map(l => ({ ...l, typeName: byId(data.itemTypes, l.typeId)?.name, unit: byId(data.itemTypes, l.typeId)?.unit })),
-      doc, fileName: uniqueName(Docs.invoiceFileName(doc)), file: null
+      doc, fileName: uniqueName(Docs.invoiceFileName(doc))
     };
     data.history.unshift(h);
     if (+f.number >= data.nextInvoiceNumber) data.nextInvoiceNumber = +f.number + 1;
-    if (Drive.enabled()) { await Queue.add({ id: h.id, historyId: h.id, folder: 'Invoices', name: h.fileName, blob }); pendingUploads++; }
     changed();
     numberTouched = false;
     $('#inv-number').value = data.nextInvoiceNumber;
     updateInvoice();
     showResult('invoice', h, blob);
-    if (!Drive.enabled()) downloadFile(blob, h.fileName);
-    sync();
+    downloadFile(blob, h.fileName);
   } catch (e) {
     fail(e.message);
   } finally { btn.disabled = false; btn.textContent = 'Create invoice PDF'; }
@@ -541,7 +372,7 @@ $('#workers').addEventListener('click', e => {
   const b = e.target.closest('[data-delworker]'); if (!b) return;
   const w = byId(data.workers, b.closest('.person').dataset.id);
   if (!confirm(`Remove ${w.name} from the list of workers?`)) return;
-  data.workers = data.workers.filter(x => x !== w); data.deleted[w.id] = Date.now();
+  data.workers = data.workers.filter(x => x !== w);
   changed(); renderSalaries();
 });
 $('#sal-date').addEventListener('input', updateSalaries);
@@ -577,11 +408,6 @@ $('#sal-generate').onclick = async () => {
   if (o.pay && missing(o.lastAmount)) problems.push('an amount for the owner');
   if (o.pay && !site) problems.push('a site');
   if (problems.length) { out.className = 'result err'; out.textContent = 'Please add ' + problems.join(', ') + '.'; return; }
-
-  if (Drive.enabled() && navigator.onLine && !Drive.hasToken()) {
-    try { await Drive.signIn(); }
-    catch (e) { if (!confirm(`Couldn't connect to Google Drive (${e.message}).\n\nCreate the sheet anyway? It will be uploaded later.`)) return; }
-  }
   btn.disabled = true; btn.textContent = 'Creating…';
   try {
     const doc = {
@@ -593,14 +419,12 @@ $('#sal-generate').onclick = async () => {
     const h = {
       id: uid(), type: 'salaries', createdAt: new Date().toISOString(), date, site,
       total: round2(doc.workers.reduce((s, w) => s + w.amount, 0)), doc,
-      fileName: uniqueName(Docs.salariesFileName(doc)), file: null
+      fileName: uniqueName(Docs.salariesFileName(doc))
     };
     data.history.unshift(h);
-    if (Drive.enabled()) { await Queue.add({ id: h.id, historyId: h.id, folder: 'Salaries', name: h.fileName, blob }); pendingUploads++; }
     changed();
     showResult('salaries', h, blob);
-    if (!Drive.enabled()) downloadFile(blob, h.fileName);
-    sync();
+    downloadFile(blob, h.fileName);
   } catch (e) {
     out.className = 'result err'; out.textContent = e.message;
   } finally { btn.disabled = false; btn.textContent = 'Create salaries sheet'; }
@@ -617,19 +441,14 @@ function renderHistory() {
     return `<div class="hist">
       <span class="badge ${inv ? 'inv' : 'sal'}">${inv ? 'Invoice' : 'Salaries'}</span>
       <div class="main"><b>${inv ? 'Invoice ' + esc(h.number) : esc(dmy(h.date)) + ' · ' + people + ' people'}</b>
-        <div>${inv ? esc(dmy(h.date)) + ' · ' + esc(h.billTo) + ' · ' + esc(h.project) : esc(h.site)}
-          ${Drive.enabled() && !h.file ? ' · <span class="pending">not uploaded yet</span>' : ''}</div></div>
+        <div>${inv ? esc(dmy(h.date)) + ' · ' + esc(h.billTo) + ' · ' + esc(h.project) : esc(h.site)}</div></div>
       <div class="amount">${eur(h.total)}</div>
       <div class="btns">
-        ${h.file ? `<a class="btn small" href="${esc(h.file.link)}" target="_blank" rel="noopener">Open</a>` : ''}
         ${canShare() ? `<button class="btn small" data-hshare="${esc(h.id)}">Share…</button>` : ''}
         <button class="btn small" data-hdl="${esc(h.id)}">Download</button>
         <button class="btn small" data-again="${esc(h.id)}" title="Start a new document with the same details">Copy</button>
       </div></div>`;
   }).join('') : `<div class="empty">${data.history.length ? 'Nothing matches your search.' : 'Documents you create will show up here.'}</div>`;
-  const link = Drive.folderLink();
-  $('#drive-folder-link').hidden = !link;
-  if (link) $('#drive-folder-link a').href = link;
 }
 $('#hist-search').addEventListener('input', renderHistory);
 $('#hist-type').onchange = renderHistory;
@@ -690,33 +509,7 @@ function renderSettings() {
     <div class="srow items" data-id="${esc(t.id)}"><input data-k="name" value="${esc(t.name)}" aria-label="Item name">
       <input data-k="unit" value="${esc(t.unit)}" aria-label="Unit">
       <input data-k="rate" type="number" min="0" step="any" inputmode="decimal" class="num" value="${esc(t.rate)}" aria-label="Price">${del}</div>`).join('');
-  renderSettingsDrive();
 }
-
-function renderSettingsDrive() {
-  const el = $('#drive-state');
-  if (!Drive.enabled()) {
-    el.closest('.card').hidden = true;
-    return;
-  }
-  const link = Drive.folderLink();
-  el.innerHTML = Drive.hasToken()
-    ? `<div>✓ Connected. Your data and documents are kept in the <b>ERE Documents</b> folder in your Drive.</div>
-       <div class="actions">
-         <button class="btn small" id="drive-sync">Sync now</button>
-         ${link ? `<a class="btn small" href="${link}" target="_blank" rel="noopener">Open folder</a>` : ''}
-         <button class="btn small danger" id="drive-out">Disconnect</button>
-       </div>`
-    : `<div class="muted">Connect once on each device (phone and PC) to share the same data.</div>
-       <div class="actions"><button class="btn primary" id="drive-in">Connect Google Drive</button></div>`;
-}
-$('#drive-state').addEventListener('click', async e => {
-  if (e.target.id === 'drive-in') connectDrive();
-  if (e.target.id === 'drive-sync') { await sync(); toast(syncState === 'ok' ? 'Up to date.' : syncError || 'Could not sync.'); }
-  if (e.target.id === 'drive-out' && confirm('Disconnect Google Drive on this device? Your Drive files stay where they are.')) {
-    Drive.signOut(); meta.version = null; persist(); syncState = 'signin'; renderStatus(); renderSettingsDrive();
-  }
-});
 
 $$('[data-bind]').forEach(i => i.addEventListener('input', () => {
   let v = i.value;
@@ -740,7 +533,6 @@ function wireList(sel, listKey, defKey, label) {
     if (listKey === 'itemTypes' && data.itemTypes.length === 1) return toast(`Keep at least one ${label}.`);
     if (!confirm(`Remove "${item.name}"?`)) return;
     data[listKey] = data[listKey].filter(x => x.id !== id);
-    data.deleted[id] = Date.now();
     if (defKey && data[defKey] === id) data[defKey] = data[listKey][0]?.id ?? null;
     changed(); renderSettings();
   });
@@ -767,32 +559,22 @@ $('#backup-import').onchange = async e => {
   try {
     const imported = JSON.parse(await file.text());
     if (!imported || typeof imported !== 'object' || !imported.company) throw new Error('This file is not an ERE Documents data file.');
-    if (!confirm('Replace all lists, settings and history with the contents of this file? This applies to all your devices.')) return;
+    if (!confirm('Replace all lists, settings and history on this device with the contents of this file?')) return;
     data = normalize(imported);
-    meta.overwrite = true;
     changed();
     numberTouched = false;
     renderSettings(); renderBanner();
     toast('Data imported.');
-    sync();
   } catch (err) { toast(err.message); }
 };
 
 // ------------------------------------------------------------------ start
-window.onGoogleReady = () => { Drive.ready(); renderStatus(); };
-window.addEventListener('online', () => sync());
-window.addEventListener('offline', () => { syncState = 'offline'; renderStatus(); });
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible') return;
-  if (!dateTouched && $('#inv-date').value !== today()) { $('#inv-date').value = today(); updateInvoice(); }
-  sync();
+  if (document.visibilityState === 'visible' && !dateTouched && $('#inv-date').value !== today()) { $('#inv-date').value = today(); updateInvoice(); }
 });
-setInterval(() => { if (document.visibilityState === 'visible') sync(); }, 120000);
 
 renderBanner();
 renderInvoiceForm(true);
-if (Drive.enabled()) { syncState = Drive.hasToken() ? 'idle' : 'signin'; sync(); }
-renderStatus();
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});

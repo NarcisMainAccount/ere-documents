@@ -31,16 +31,6 @@
   nav button svg { width: 18px; height: 18px; }
   nav button:hover { color: var(--text); }
   nav button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
-  .sync { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); background: none;
-          border: 1px solid var(--line); border-radius: 99px; padding: 6px 12px; cursor: pointer; font-family: inherit; white-space: nowrap; }
-  .sync .dot { width: 8px; height: 8px; border-radius: 50%; background: #aab4bf; flex: none; }
-  .sync.ok .dot { background: var(--ok); }
-  .sync.busy .dot { background: var(--accent); animation: pulse 1s infinite; }
-  .sync.warn .dot { background: #e0a100; }
-  .sync.err .dot { background: var(--danger); }
-  .sync.action { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
-  .sync.action .dot { background: #fff; }
-  @keyframes pulse { 50% { opacity: .3; } }
 
   main { max-width: 1180px; margin: 0 auto; padding: 24px 20px 60px; }
   section[data-tab] { display: none; }
@@ -138,7 +128,6 @@
   .badge { display: inline-block; padding: 3px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; }
   .badge.inv { background: var(--accent-soft); color: var(--accent); }
   .badge.sal { background: var(--warn-soft); color: var(--warn); }
-  .pending { font-size: 12px; color: var(--warn); }
   .empty { text-align: center; color: var(--muted); padding: 30px 10px; }
   .toolbar { display: flex; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
   .toolbar input { flex: 1 1 220px; }
@@ -207,7 +196,6 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
         Settings</button>
     </nav>
-    <button class="sync" id="sync" hidden><span class="dot"></span><span id="sync-text"></span></button>
   </div>
 </header>
 
@@ -319,7 +307,6 @@
       </select>
     </div>
     <div id="history"></div>
-    <div class="actions" id="drive-folder-link" hidden><a class="btn small" target="_blank" rel="noopener">Open the Drive folder</a></div>
   </div>
 </section>
 
@@ -369,14 +356,9 @@
 
     <div>
       <div class="card">
-        <h2>Google Drive</h2>
-        <div id="drive-state"></div>
-      </div>
-
-      <div class="card">
         <h2>Invoice numbering</h2>
         <label class="f" style="max-width:200px">Next invoice number <input data-bind="nextInvoiceNumber" type="number" min="1" inputmode="numeric"></label>
-        <div class="hint">Goes up by one every time an invoice is created, on any device.</div>
+        <div class="hint">Goes up by one every time an invoice is created.</div>
       </div>
 
       <div class="card">
@@ -400,7 +382,7 @@
           <button class="btn small" id="backup-download">Download a backup</button>
           <label class="btn small">Import a data file<input type="file" id="backup-import" accept=".json,application/json" hidden></label>
         </div>
-        <div class="hint">Importing replaces all lists and settings on every device.</div>
+        <div class="hint">Importing replaces all lists, settings and history on this device.</div>
       </div>
     </div>
   </div>
@@ -408,20 +390,9 @@
 </main>
 <div id="toast"></div>
 
-<script src="config.js"></script>
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/jszip.min.js"></script>
 <script src="docs.js"></script>
-<script src="drive.js"></script>
 <script src="app.js"></script>
-<script>
-  // Google sign-in is only loaded when Drive sync is configured in config.js.
-  if ((window.ERE_CONFIG || {}).googleClientId) {
-    const s = document.createElement('script');
-    s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
-    s.onload = () => window.onGoogleReady && onGoogleReady();
-    document.body.append(s);
-  }
-</script>
 </body>
 </html>

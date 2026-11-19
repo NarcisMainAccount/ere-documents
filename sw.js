@@ -1,7 +1,7 @@
 // Offline support: always try the network first (so updates show up), fall back to the cached copy.
-const CACHE = 'ere-documents-v3';
+const CACHE = 'ere-documents-v4';
 const FILES = [
-  './', 'index.html', 'app.js', 'docs.js', 'drive.js', 'config.js', 'manifest.webmanifest',
+  './', 'index.html', 'app.js', 'docs.js', 'manifest.webmanifest',
   'vendor/jspdf.umd.min.js', 'vendor/jszip.min.js', 'templates/salaries-template.xlsx',
   'icons/icon-192.png', 'icons/icon-512.png'
 ];
@@ -18,7 +18,7 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  if (e.request.method !== 'GET' || url.origin !== location.origin) return;   // Google APIs go straight to the network
+  if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   e.respondWith(
     fetch(e.request)
       .then(res => {
